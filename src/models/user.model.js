@@ -16,7 +16,7 @@ const userSchema = new Schema (
             type: String,
             required: [true,"Password is Required"],
             unique: true,
-            lowecase: true,
+            lowercase: true,
             trim: true,
         },
         fullName : {
@@ -51,6 +51,7 @@ const userSchema = new Schema (
     }
 )
 
+//only save password when it is changed or modified
 userSchema.pre("save", async function(next){
     if(!this.isModified("password")) return next();
 
@@ -58,6 +59,7 @@ userSchema.pre("save", async function(next){
     next()
 })
 
+//check for password correct or not using bcrypt inbuild compare function 
 userSchema.methods.isPasswordCorrect = async function(password){
     return await bcrypt.compare(password,this.password)
 }

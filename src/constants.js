@@ -1,1 +1,1 @@
-export const DB_NAME = "CircleView";
+export const DB_NAME = "CircleViewTube";
