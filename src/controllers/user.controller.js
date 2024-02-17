@@ -283,10 +283,144 @@ const refreshAccessToken = asyncHandler ( async (req,res)=>{
 
 })
 
+const changeCurrentPassword = asyncHandler ( async ( req,res )=>{
+
+    /*Code comments: 1.Taking input from frontend in req.body
+    2.check for new password is similiar to confirm password
+    3.find the user using _id because we use auth.middleware in our endpoints, that's why we get our user here , and then write a Query using
+    User.findById from database (that's why we use await here)
+    4.now check for password is correct using the method isPasswordCorrect() which give value in true or false and we write this in our user.model where we use pre hooks
+    5.if password is correct,then we update the user object password to newPassword, then this triggred and go into user model, and just before save , our pre hook is running where we use isModified() method , and password will hash and use the bcrypt there 
+    6.then we save the user details and also add validateBeforeSave to false , so that whole database is not validate once again
+    7.At last we return the response
+      */
+    const {oldPassword, newPassword, confirmPassword} = req.body;
+
+    if(!(newPassword === confirmPassword)){
+        throw new ApiError(400, "Password Not Matched");
+    }
+
+    const user =  await User.findById(req.user?._id)
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+
+    if(!isPasswordCorrect){
+        throw new ApiError(400,"oldPassword is invalid")
+    }
+
+    user.password = newPassword
+    await user.save({validateBeforeSave: false})
+
+    return res
+    .status(200)
+    .json (new ApiResponse(200,{},"Password Changed Successfully"))
+})
+
+const getCurrentUser = asyncHandler( async (req,res) =>{
+    return res
+    .status(200)
+    .json(new ApiResponse(200,req.user,"Current User Fetched Successfully"))
+    /* code comments: when we hit the endpoints at authMiddleware,we have auth middleware,where we have details of the user , so if we have loggedIn user , then we can give the current details in seconds, and in the return the response */
+})
+
+const updateAccountDetails = asyncHandler (async(req,res)=>{
+    const {fullName, email} = req.body
+
+    if(!fullName || !email){
+        throw new ApiError (400,"All fields are required")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                fullName: fullName,
+                email: email
+            }
+        },
+        {new: true}
+        ).select("-password")
+
+        return res
+        .status(200)
+        .json(new ApiResponse(200,user,"Account Details updated Successfully"))
+})
+
+const updateUserAvatar = asyncHandler (async (req,res)=>{
+    /*code comments
+    1.take req.file from multer middleware like we use in register user
+      but we take req.file here not req.files because only work on one file not on array of files.
+    2.we take avatar local file here from req.file?.path
+    3.now, upload avatar file on cloudinary 
+    4.check for avatar url , if missing write an error
+    5.now we update our avatar using findByIdAndUpdate AND Insert $set in this where we do avatar = avatar.url , we put the url of avatar in database , not the object of avatar, as we set type: string in our User Model for avatar
+    note: $set only update what we value we insert on this, and it takes an object */
+
+   const avatarLocalPath =  req.file?.path
+
+   if(!avatarLocalPath){
+        throw new ApiError(400,"Avatar file is missing")
+    }
+
+    const avatar = await uploadOnCloudinary(avatarLocalPath)
+
+    if(!avatar.url){
+        throw new ApiError(400,"Error while uploading on Avatar url")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set:{
+                avatar : avatar.url
+            }
+        },
+        {new : true}
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,user,"Avatar is updated Successfully"))
+})
+
+const updateUserCoverImage = asyncHandler (async (req,res)=>{
+
+    const coverImageLocalPath = req.file?.path
+
+    if(!coverImageLocalPath){
+        throw new ApiError(400,"CoverImage file is missing")
+    }
+
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+    if(!coverImage.url){
+        throw new ApiError(400,"Error while Uploading the cover image")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set:{
+                coverImage : coverImage.url
+            }
+        },
+        {new: true}
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,user,"Cover Image is updated Successfully"))
+
+})
+
 export { 
     registerUser,
     loginUser,
     logOutUser,
-    refreshAccessToken
+    refreshAccessToken,
+    changeCurrentPassword,
+    getCurrentUser,
+    updateAccountDetails,
+    updateUserAvatar,
+    updateUserCoverImage
 
 }
