@@ -361,6 +361,11 @@ const updateUserAvatar = asyncHandler (async (req,res)=>{
         throw new ApiError(400,"Avatar file is missing")
     }
 
+    // Retrieve the user's current avatar URL from the database
+    const currentUser = await User.findById(req.user?._id).select("avatar");
+    const oldAvatarUrl = currentUser.avatar;
+
+
     const avatar = await uploadOnCloudinary(avatarLocalPath)
 
     if(!avatar.url){
@@ -376,6 +381,13 @@ const updateUserAvatar = asyncHandler (async (req,res)=>{
         },
         {new : true}
     ).select("-password")
+
+    
+    // // If the user had an old avatar, delete it from Cloudinary
+    // if (oldAvatarUrl) {
+    //     const publicId = extractPublicIdFromUrl(oldAvatarUrl);
+    //     await deleteFromCloudinary(publicId);
+    // }
 
     return res
     .status(200)
@@ -412,6 +424,80 @@ const updateUserCoverImage = asyncHandler (async (req,res)=>{
 
 })
 
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+    const {username} = req.params
+
+    if(!username?.trim()){
+        throw new ApiError(400,"Username is missing")
+    }
+
+    const channel = await User.aggregate([
+        {
+            $match : {
+                username  : username?.toLowerCase() //check for all username , match is like filter (take out all user using username )
+            }
+        },
+        {
+            $lookup : {
+                from: "subscriptions", // from where,which model you want lookup
+                localField:"_id", // from which we connected two models all together
+                foreignField: "channel", //from where we want to look
+                as: "subscribers" //name of the newly created field
+            }
+        },
+        {
+            $lookup:{
+                from: "subscriptions",
+                localField:"_id",
+                foreignField: "subscriber", // like,where we want to select value and insert into our document
+                as: "subscribedTo"
+            }
+        },
+        {
+            //another operator: which will do addition of newly created field into our yser model, and it doesn't effect the former field we have in our model , all the previous field remain the same , and also add the newly created field into our model
+            $addFields:{     
+                subscribersCount: {
+                    $size: "$subscribers", // to add(count) all the document subscriber have we use $size
+                },                         
+                channelsSubscribedToCount:{
+                    $size: "$subscribedTo"  //we add dollor sign here, because it is field subscribedTo now
+                },
+                isSubscribed: { //use to check if we are subscribed to a channel or not , we use flag to indicate to frontend that we are subscribed to a channel or not.
+                    $cond: {
+                        if:{$in: [req.user?._id,"$subscribers.subscriber"]}, //$in is used to check in array[] if we are subscribed to a channel or not and we have to check req.user?._id which check for field value of $subscribers.subscriber is present in this or not. 
+                        then:true,
+                        else:false
+                    }
+                }
+            }
+        },
+        {
+            $project:{ // project is used for projection of values , means that we only show values that are we need to display,not all values. and use flags for projection like 0 and 1.
+                fullName: 1,
+                username: 1,
+                subscribersCount: 1,
+                channelsSubscribedToCount : 1,
+                isSubscribed: 1,
+                avatar: 1,
+                coverImage: 1,
+                email: 1,
+            }
+        }
+    ])
+    console.log(channel);
+    
+
+    if(!channel?.length){
+        throw new ApiError(404,"Channel Does not exist")
+    }
+
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(200,channel[0],"user channel fetched        successfully"))
+
+})
+
 export { 
     registerUser,
     loginUser,
@@ -421,6 +507,7 @@ export {
     getCurrentUser,
     updateAccountDetails,
     updateUserAvatar,
-    updateUserCoverImage
+    updateUserCoverImage,
+    getUserChannelProfile
 
 }
