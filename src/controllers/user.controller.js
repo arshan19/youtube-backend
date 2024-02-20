@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js"
 import { User } from "../models/user.model.js"
 import  jwt  from "jsonwebtoken";
+import mongoose from "mongoose";
 
 const generateAccessAndRefreshTokens = async(userId) =>{
     try {
@@ -494,8 +495,73 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     return res
     .status(200)
     .json(
-        new ApiResponse(200,channel[0],"user channel fetched        successfully"))
+        new ApiResponse(200,channel[0],"user channel fetched successfully"))
 
+})
+
+const getWatchHistory = asyncHandler (async(req,res)=>{
+    
+    //so here we can't fetch req.user._id directly because aggregate pipeline work on mongoDB not on mongoose , so we can't find _id directly so use 
+    //new mongoose.Types.ObjectId(req.user._id) for fetch the _id directly from mongoDB database
+
+    const user = await User.aggregate([
+        {
+            $match:{
+                _id : new mongoose.Types.ObjectId(req.user._id)
+            }
+        },
+        {
+            /* Here we use pipeline inside pipeline , nested pipelines,because in our model 
+            we have watch history connected to video model and also in our video model we have owner field,which contains information of owner, which is also a user, 
+            so then in our first lookup pipeleine insert another pipeline to fetch the owner details from users 
+            and using $project we only project needed field , not all unneccesary field */
+            
+            $lookup:{
+                from:"videos",
+                localField:"watchHistory",
+                foreignField:"_id",
+                as:"watchHistory",
+                pipeline:[
+                    {
+                        $lookup:{
+                            from:"users",
+                            localField:"owner",
+                            foreignField:"_id",
+                            as:"owner",
+                            pipeline:[
+                                {
+                                $project: {
+                                    fullName: 1,
+                                    username: 1,
+                                    avatar: 1,
+                                    }
+                                }
+                            ]
+                        }   
+                    },
+                    //we get an array now,and what we want take from that array is first value[0] ,so we also get the value from there, but we use some easier way to get the value,
+                    //for the frontend developer, we can take the first value from the array using $addFields, and insert it into the owner and find the element of array using $first from the field owner
+                    {
+                        $addFields:{
+                            owner:{
+                                 $first: "$owner"
+                            }
+                        }
+                    },
+                ]
+            }
+        },
+        
+    ])
+
+    return res
+    .status(200)
+    .json(ApiResponse(
+        200,
+        user[0].watchHistory,
+        "watch history fetched successfully"
+        )
+    )
 })
 
 export { 
@@ -508,6 +574,7 @@ export {
     updateAccountDetails,
     updateUserAvatar,
     updateUserCoverImage,
-    getUserChannelProfile
+    getUserChannelProfile,
+    getWatchHistory
 
 }
