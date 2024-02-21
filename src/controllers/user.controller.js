@@ -217,8 +217,8 @@ const logOutUser = asyncHandler (async(req,res)=>{
     await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set: {
-                refreshToken: "" // or undefined
+            $unset: {
+                refreshToken: 1 //this remove the field from document
             }
         },
         {
@@ -301,6 +301,8 @@ const changeCurrentPassword = asyncHandler ( async ( req,res )=>{
         throw new ApiError(400, "Password Not Matched");
     }
 
+    //console.log(typeof oldPassword);
+
     const user =  await User.findById(req.user?._id)
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
 
@@ -329,7 +331,7 @@ const updateAccountDetails = asyncHandler (async(req,res)=>{
     if(!fullName || !email){
         throw new ApiError (400,"All fields are required")
     }
-
+    
     const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
@@ -363,8 +365,8 @@ const updateUserAvatar = asyncHandler (async (req,res)=>{
     }
 
     // Retrieve the user's current avatar URL from the database
-    const currentUser = await User.findById(req.user?._id).select("avatar");
-    const oldAvatarUrl = currentUser.avatar;
+    // const currentUser = await User.findById(req.user?._id).select("avatar");
+    // const oldAvatarUrl = currentUser.avatar;
 
 
     const avatar = await uploadOnCloudinary(avatarLocalPath)
@@ -556,7 +558,7 @@ const getWatchHistory = asyncHandler (async(req,res)=>{
 
     return res
     .status(200)
-    .json(ApiResponse(
+    .json(new ApiResponse(
         200,
         user[0].watchHistory,
         "watch history fetched successfully"
