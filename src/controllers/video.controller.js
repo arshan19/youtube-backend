@@ -42,7 +42,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
     // Create aggregation pipeline
 
     const videos = await Video.aggregate([
-      {
+      
         /* Here's a breakdown of the provided code:
             1. **$match Stage**:
                 - It's an aggregation pipeline stage used to filter documents based on specified criteria.
@@ -59,103 +59,106 @@ const getAllVideos = asyncHandler(async (req, res) => {
                 - The `$options: "i"` option ensures a case-insensitive match.
 
             So, this stage effectively filters videos based on whether their titles or descriptions contain the provided query string, and only includes videos that are published (`isPublished: true`). */
-
-        $match: {
-          $or: [
-            { title: { $regex: query, $options: "i" } },
-            { description: { $regex: query, $options: "i" } },
-          ],
-          isPublished: true,
-        },
-      },
-      {
-        $lookup: {
-          // Perform a lookup in the "likes" collection
-          from: "likes",
-          // Match documents where the "_id" field matches the video ID
-          localField: "_id",
-          // Match documents in the "likes" collection where the "video" field matches the video ID
-          foreignField: "video",
-          // Store the fetched likes in an array field named "likes"
-          as: "likes",
-          // Nested pipeline to further process the joined documents
-          pipeline: [
-            {
-              //The count stage counts the number of documents in the "likes" array (which represent likes for each video).The count is then assigned to a new field named "totalLikes" in the output documents.
-              $count: "totalLikes",
+        {
+            $match: {
+                $or: [
+                { title: { $regex: query, $options: "i" } },
+                { description: { $regex: query, $options: "i" } },
+            ],
+                isPublished: true,
             },
-          ],
         },
-        /* So, in summary, this aggregation pipeline stage first fetches 
-        related likes for each video, and then within the nested pipeline, 
-        it counts the total number of likes for each video and 
-        adds that count as a field in the output documents. */
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "owner",
-          foreignField: "_id",
-          as: "owner",
-          pipeline: [
-            {
-              $project: {
-                username: 1,
-              },
+        {
+            $lookup: {
+                // Perform a lookup in the "likes" collection
+                from: "likes",
+                // Match documents where the "_id" field matches the video ID
+                localField: "_id",
+                // Match documents in the "likes" collection where the "video" field matches the video ID
+                foreignField: "video",
+                // Store the fetched likes in an array field named "likes"
+                as: "likes",
+                // Nested pipeline to further process the joined documents
+                    pipeline: [{
+                            //The count stage counts the number of documents in the "likes" array (which represent likes for each video).The count is then assigned to a new field named "totalLikes" in the output documents.
+                            $count: "totalLikes",
+                        },
+                    ],
             },
-          ],
+            /* So, in summary, this aggregation pipeline stage first fetches 
+            related likes for each video, and then within the nested pipeline, 
+            it counts the total number of likes for each video and 
+            adds that count as a field in the output documents. */
         },
-        /*So, in summary, this stage retrieves user details from the "users" collection
-        based on the "owner" field in the current collection (videos). It then stores the 
-        fetched user details in an array field named "owner" in the output documents. 
-        Within the nested pipeline,only the "username" field is projected from the joined user documents. */
-      },
-      {
-        $addFields: {
-          // Add a new field named 'owner' to each document
-          owner: {
-            // Select the first element of the 'owner' array and extract its 'username' field
-            $first: "$owner.username",
-          },
-          // Add a new field named 'likes' to each document
-          likes: {
-            // Conditionally project either the total count of likes or 0 based on the size of the 'likes.totalLikes' array
-            $cond: {
-              // Check if the 'totalLikes' array is empty
-              if: { $eq: [{ $size: "$likes.totalLikes" }, 0] },
-              // If the 'totalLikes' array is empty, project 0
-              then: 0,
-              // If the 'totalLikes' array is not empty, project the total count of likes
-              else: { $first: "$likes.totalLikes" },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                    pipeline: [{
+                        $project: {
+                            username: 1,
+                        },
+                     },
+                ],
             },
-          },
+            /*So, in summary, this stage retrieves user details from the "users" collection
+            based on the "owner" field in the current collection (videos). It then stores the 
+            fetched user details in an array field named "owner" in the output documents. 
+            Within the nested pipeline,only the "username" field is projected from the joined user documents. */
         },
-      },
-      {
-        $project: {
-          _id: 1,
-          videoFile: 1,
-          thumbnail: 1,
-          title: 1,
-          description: 1,
-          duration: 1,
-          views: 1,
-          isPublished: 1,
-          owner: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          likes: 1,
+        {
+            $addFields: {
+            // Add a new field named 'owner' to each document
+                owner: {
+                // Select the first element of the 'owner' array and extract its 'username' field
+                    $first: "$owner.username",
+                },
+                // Add a new field named 'likes' to each document
+                likes: {
+                // Conditionally project either the total count of likes or 0 based on the size of the 'likes.totalLikes' array
+                    $cond: {
+                        // Check if the 'totalLikes' array is empty
+                        if: { 
+                            $eq: [{ $size: "$likes.totalLikes" }, 0] //This operator is used to compare two values for equality. It returns true if the values are equal and false otherwise. 
+                        },
+                        // If the 'totalLikes' array is empty, project 0, // If the 'totalLikes' array is not empty, project the total count of likes
+                        then: 0,
+                        else: { $first: "$likes.totalLikes" },
+                    },
+                },
+            },
         },
-      },
+        {
+            $project: {
+                _id: 1,
+                videoFile: 1,
+                thumbnail: 1,
+                title: 1,
+                description: 1,
+                duration: 1,
+                views: 1,
+                isPublished: 1,
+                owner: 1,
+                createdAt: 1,
+                updatedAt: 1,
+                likes: 1,
+            },
+        }, 
+        { 
+            // Sort the results based on the specified sortBy field and sortType (ascending or descending)
+            $sort: { [sortBy]: sortType === "asc" ? 1 : -1 } 
+        },
+        { 
+            // Skip the specified number of documents based on pagination
+            $skip: skip 
+        },
+        { 
+            // Limit the number of documents returned based on pagination
+            $limit: pageSize 
+        },
 
-      // Sort the results based on the specified sortBy field and sortType (ascending or descending)
-      { $sort: { [sortBy]: sortType === "asc" ? 1 : -1 } },
-
-      // Skip the specified number of documents based on pagination
-      { $skip: skip },
-
-      // Limit the number of documents returned based on pagination
-      { $limit: pageSize },
     ]);
 
     // console.log("videos :", videos)
@@ -218,7 +221,6 @@ const publishAVideo = asyncHandler(async (req, res) => {
     // thumbnailLocalPath = req.files.thumbnail[0].path;
     // }
 
-
     // Step2: Get the videoFile and thumbnail from middleware.
     /* we use optional chaining here */
     const videoLocalPath = req.files?.videoFile[0].path; //req.files comes from multer it give access from middleware we implement on video.routes for publish a video
@@ -231,7 +233,10 @@ const publishAVideo = asyncHandler(async (req, res) => {
     }
 
     if (!thumbnailLocalPath) {
-      throw new ApiError(400, "Error in fetching the thumbnail file local path");
+      throw new ApiError(
+        400,
+        "Error in fetching the thumbnail file local path"
+      );
     }
 
     // Step3: Fetch the local path of videoFile and thumbnail, then update it on cloudinary.
@@ -248,13 +253,11 @@ const publishAVideo = asyncHandler(async (req, res) => {
     }
 
     // console.log("videoFileCloudinaryPath.secure_url :", videoFileCloudinaryPath.secure_url)
-       // console.log("videoFileCloudinaryPath.duration :", videoFileCloudinaryPath.duration)
-       // console.log("thumbnailPathCloudinaryPath.secure_url :", thumbnailPathCloudinaryPath.secure_url)
-       // console.log("title :", title)
-       // console.log("description :", description)
+    // console.log("videoFileCloudinaryPath.duration :", videoFileCloudinaryPath.duration)
+    // console.log("thumbnailPathCloudinaryPath.secure_url :", thumbnailPathCloudinaryPath.secure_url)
+    // console.log("title :", title)
+    // console.log("description :", description)
 
-    
-    
     // Step4: Create the mongoDB document for the new video.
     const newVideo = await Video.create({
       title,
@@ -286,21 +289,79 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
 const getVideoById = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
-  //TODO: get video by id
 
   if (!isValidObjectId(videoId)) {
     throw new ApiError(400, "Invalid videoId");
   }
 
-  const video = await Video.findById(videoId);
+  try {
+    const video2 = await Video.findById(videoId);
 
-  if (!video) {
-    throw new ApiError(401, "Video Not found");
+    console.log("video :", video2);
+
+    if (!video2) {
+      throw new ApiError(400, "There is no video available with this video ID");
+    }
+
+    const video = await Video.aggregate([
+      {
+        $match: {
+          _id: mongoose.Types.ObjectId(videoId),
+        },
+      },
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "video",
+          as: "likes",
+        },
+      },
+      {
+        $addFields: {
+          likes: {
+            $size: "$likes",
+          },
+          isliked: {
+            $cond: {
+              if: {
+                $in: [req.user?._id, "$likes.likedBy"],
+              },
+              then: true,
+              else: false,
+            },
+          },
+        },
+          /*isLiked: This field determines whether the current user has liked the video or not.
+            It uses the $cond (conditional) operator to check if the user's ID (req.user?._id) 
+            exists in the likedBy array within the likes array. 
+            If the user's ID is found in the likedBy array,it returns true; otherwise, it returns false. */
+      },
+      {
+        $project: {
+          "videoFile.url": 1,
+          title: 1,
+          description: 1,
+          views: 1,
+          createdAt: 1,
+          duration: 1,
+          comments: 1,
+          likes: 1,
+          isLiked: 1,
+        },
+      },
+    ]);
+
+    console.log("video :", video);
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, video, "Video Fetched successfully"));
+
+  } 
+  catch (error) {
+    throw new ApiError(500, "Getting error while getting the video");
   }
-
-  return res
-    .status(200)
-    .json(new ApiResponse(200, video, "Video is find successfully"));
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
